@@ -571,6 +571,7 @@ subroutine cvode_equilibrium(rtol, atol, use_fast_jacobian, success, err)
       print"('Time to find equilibrium =',f10.3,' seconds')", &
             (c2-c1)/real(cr)
     endif
+  endif ! end if converged
   ! the output
     do i=1,nq
       do j=1,nz
@@ -626,6 +627,6 @@ subroutine cvode_equilibrium(rtol, atol, use_fast_jacobian, success, err)
 
     ! redox state
     call redox_conservation(FLOW,FUP,SR)
-  endif ! end if converged
+
 
 end subroutine                                
