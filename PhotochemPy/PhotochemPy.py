@@ -1,7 +1,8 @@
-import numpy as np
 from ._photochem import photochem, photochem_data, photochem_vars, photochem_wrk
 import sys
 import os
+import numpy as np
+
 
 rootdir = os.path.dirname(os.path.realpath(__file__))+'/'
 photochem_vars.rootdir = "{:500}".format(rootdir)
@@ -91,6 +92,17 @@ class PhotochemPy:
                         self.ispec.append(line.split()[0])
             self.ispec.append('HV')
             self.ispec.append('M')
+
+            # get reaction names
+            self.reactions = []
+            with open(self.reactions_rx) as f:
+                for line in f.readlines():
+                    molecules = line[:48]
+                    molecules = molecules.split()
+                    reactants = molecules[0] + ' + ' + molecules[1] + ' = '
+                    products = ' + '.join(molecules[2:])
+                    self.reactions.append(reactants + products)
+
             err = self.photo.setup(species_dat, \
                                    reactions_rx, \
                                    set_file, \
@@ -100,6 +112,8 @@ class PhotochemPy:
                 raise PhotochemError(err.decode("utf-8").strip())
                 
             self.code_run = False
+            self.converged = False
+            self.redox_factor = np.nan
             self.test_for_reproducibility()
 
     def setup(self,species_dat,reactions_rx,set_file,\
@@ -150,6 +164,17 @@ class PhotochemPy:
                     self.ispec.append(line.split()[0])
         self.ispec.append('HV')
         self.ispec.append('M')
+
+        # get reaction names
+        self.reactions = []
+        with open(self.reactions_rx) as f:
+            for line in f.readlines():
+                molecules = line[:48]
+                molecules = molecules.split()
+                reactants = molecules[0] + ' + ' + molecules[1] + ' = '
+                products = ' + '.join(molecules[2:])
+                self.reactions.append(reactants + products)
+
         err = self.photo.setup(species_dat, \
                                reactions_rx, \
                                set_file, \
@@ -159,6 +184,8 @@ class PhotochemPy:
             raise PhotochemError(err.decode("utf-8").strip())
             
         self.code_run = False
+        self.converged = False
+        self.redox_factor = np.nan
         self.test_for_reproducibility()
         
     def test_for_reproducibility(self):
@@ -199,10 +226,11 @@ class PhotochemPy:
             if len(err.strip()) > 0:
                 raise PhotochemError(err.decode("utf-8").strip())
 
+        self.code_run = True
         if not converged:
-            self.code_run = False
+            self.converged = False
         else:
-            self.code_run = True
+            self.converged = True
 
             # check redox conservation
             if np.abs(self.vars.redox_factor) > 1e-3 and self.warnings:
@@ -213,7 +241,7 @@ class PhotochemPy:
             if np.max(self.vars.usol_out) > 1 and self.warnings:
                 print('Warning, some mixing ratios are greater than 1.')
                 
-        return self.code_run
+        return self.converged
 
     def evolve(self,t0,usol_start,t_eval,rtol = 1.0e-3, atol= 1e-27, nsteps = 1000000, \
                fast_and_loose = True, outfile = None, overwrite = False, amount2save = 1):
@@ -291,6 +319,7 @@ class PhotochemPy:
             out['den'] = self.vars.den
             out['press'] = self.vars.p
             out['T'] = self.vars.t
+            out['edd'] = self.vars.edd
             for i in range(self.data.nq):
                 out[self.ispec[i]] = self.vars.usol_out[i,:]
             for i in range(self.data.nq,self.data.nq+self.data.isl):
@@ -299,6 +328,35 @@ class PhotochemPy:
             out[self.ispec[-2]] = self.wrk.d[-2]/self.vars.den
             out[self.ispec[-1]] = self.wrk.d[-1]/self.vars.den
             return out
+    
+    def out_rates(self):
+        '''
+        Makes a dictionary of the reaction rates after integration to photochemical
+        equilibrium
+
+        Returns
+        -------
+        out : dict
+            Dictionary containing the rates of all reactions.
+
+        Raises
+        ------
+        SystemExit
+            When photochemical model has not been integrated to equilibrium.
+        '''
+        if not self.code_run:
+            raise PhotochemError(
+                'Need to integrate before outputting a solution!')
+        elif self.code_run:
+            sol = self.out_dict()
+            rates = {}
+            rates['alt'] = self.data.z/1e5
+            for i in range(self.data.nr):
+                reaction = self.reactions[i]
+                reactants = reaction[:reaction.find("=")].split()
+                rates[self.reactions[i]] = self.wrk.a[i] * sol[reactants[0]] *\
+                    sol[reactants[2]] * self.vars.den**2
+            return rates
 
     def in_dict(self):
         '''
@@ -361,6 +419,7 @@ class PhotochemPy:
         if len(err.strip()) > 0:
             raise PhotochemError(err.decode("utf-8").strip())
         self.code_run = False
+        self.converged = False
 
     def out2in(self):
         '''
@@ -762,12 +821,11 @@ class PhotochemPy:
             Foxi -= esc*redoxstate[i]
             
         for i,sp in enumerate(self.ispec[:self.data.nq]):
-            if sp == 'CO' or sp == 'O':
+            if sp in ['CO','O', 'N']:
                 pass
             else:
                 if self.vars.mbound[i] != 0:
-                    raise PhotochemError('Upper boundary must be effusion velocity'//
-                                        ' to compute koxy (CO and O are an exception)')
+                    raise PhotochemError('Upper boundary must be effusion velocity to compute koxy (CO and O are an exception)')
             
         return Foxi/Fred
         
