@@ -267,6 +267,8 @@ contains
       deallocate(ADD)
       deallocate(usol_out)
       deallocate(flow)
+      deallocate(fup)
+      deallocate(sr)
       deallocate(fluxo)
       deallocate(yp)
       deallocate(yl)
@@ -389,12 +391,16 @@ contains
     ! integrate.f90
     allocate(usol_out(nq,nz))
     allocate(flow(nq))
+    allocate(fup(nq))
+    allocate(sr(nq))
     allocate(fluxo(nq,nz))
     allocate(yp(nq,nz))
     allocate(yl(nq,nz))
     allocate(D(nsp2,nz))
     usol_out = 0.0d0
     flow = 0.0d0
+    fup = 0.0d0
+    sr = 0.0d0
     fluxo = 0.0d0
     yp = 0.0d0
     yl = 0.0d0

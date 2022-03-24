@@ -49,6 +49,8 @@ module photochem_vars
   ! needed in integrate.f90
   real*8, allocatable, dimension(:,:) :: usol_out
   real*8, allocatable, dimension(:) :: flow
+  real*8, allocatable, dimension(:) :: fup
+  real*8, allocatable, dimension(:) :: sr
   real*8, allocatable, dimension(:,:) :: fluxo
   
   ! cvode
