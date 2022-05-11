@@ -12,7 +12,7 @@
     use photochem_vars, only: verbose, usol_init, usol_out, rpar_init, wfall_init, aersol_init, &
                               lbound, fixedmr, vdep, vdep0, veff, veff0, smflux, sgflux, &
                               distheight, distflux, mbound, T, den, edd, fluxo, flow, H2Osat, P, &
-                              press, equilibrium_time, lbound_ptrs
+                              press, equilibrium_time, lbound_ptrs, fup, sr
     use photochem_wrk, only: rpar, wfall, aersol, hscale, scale_h, h_atm, bx1x2, &
                              A, yl, yp, rain, raingc, &
                              adl, add, adu, dl, dd, du, dk, &
@@ -54,7 +54,7 @@
     real*8 DPU(NZ,NP),DPL(NZ,NP)
     real*8, dimension(nq,nz) :: Fval, fv
     integer cr, cm, c1, c2
-    real*8,dimension(nq1) :: SR, FUP
+    ! real*8,dimension(nq1) :: SR, FUP
     ! real*8, dimension(nsp2,nz) :: D
     real(8) :: mubar_z(nz)
     ! for custom lower bc
