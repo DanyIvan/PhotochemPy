@@ -72,6 +72,7 @@ module photochem_data
   real(8) :: confac, rhcold
   logical :: fix_water_in_troposphere
   logical :: use_manabe
+  logical :: use_rh_user = .false.
   real(8) :: relative_humidity
   logical :: estimate_CO2_photo_above_grid
   

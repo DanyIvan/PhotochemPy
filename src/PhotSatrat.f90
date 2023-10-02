@@ -1,6 +1,7 @@
 
 SUBROUTINE PHOTSATRAT(nz, T, P, den, Jtrop, H2Osat, H2O)
-  use photochem_data, only: relative_humidity, use_manabe
+  use photochem_data, only: relative_humidity, use_manabe, use_rh_user
+  use photochem_vars, only: rh_user
 
   implicit none
 
@@ -54,6 +55,8 @@ SUBROUTINE PHOTSATRAT(nz, T, P, den, Jtrop, H2Osat, H2O)
   do j = 1 , Jtrop
     if (use_manabe) then
       rel = 0.77*(P(j)/ps-0.02)/0.98  !manabe formula
+    else if (use_rh_user) then
+      rel = rh_user(j)
     else
       ! for mars, rel = 0.17   
       rel = relative_humidity

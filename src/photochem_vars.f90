@@ -38,6 +38,7 @@ module photochem_vars
   real*8, allocatable, dimension(:) :: den ! total number density vs altitude
   real*8, allocatable, dimension(:) :: T ! Temperature vs altitude
   real*8, allocatable, dimension(:) :: EDD ! Eddy diffusion coefficients
+  real*8, allocatable, dimension(:) :: rh_user
   
   ! needed in Densty.f90
   real*8, allocatable, dimension(:) :: Press ! pressure in dynes

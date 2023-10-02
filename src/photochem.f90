@@ -232,6 +232,7 @@ contains
       deallocate(den)
       deallocate(T)
       deallocate(EDD)
+      deallocate(rh_user)
       deallocate(aersol)
       deallocate(wfall)
       deallocate(rpar)
@@ -295,6 +296,7 @@ contains
     allocate(den(nz))
     allocate(T(nz))
     allocate(EDD(nz))
+    allocate(rh_user(nz))
     allocate(aersol(nz,np))
     allocate(wfall(nz,np))
     allocate(rpar(nz,np))
@@ -305,6 +307,7 @@ contains
     den = 0.d0
     t = 0.d0
     edd = 0.d0
+    rh_user = 0.d0
     aersol = 0.d0
     wfall = 0.d0
     rpar = 0.d0
