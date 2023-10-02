@@ -100,6 +100,12 @@ def read_evolve_output(filename):
     sol['nump'] = nump
     sol['numl'] = numl
     sol['A'] = A
+
+    sol['T_time'] = np.empty((nt,nz))
+    sol['edd_time'] = np.empty((nt,nz))
+    sol['press_time'] = np.empty((nt,nz))
+    sol['jtrop_time'] = np.empty((nt))
+    sol['h2osat'] = np.empty((nt,nz))
     
     for sp in ispec:
         sol[sp] = np.empty((nt,nz))
@@ -120,6 +126,11 @@ def read_evolve_output(filename):
             t = f.read_record(np.double)[0]
             D = f.read_record(np.double).reshape((nsp+2,nz),order='F')
             den = f.read_record(np.double)
+            T_time = f.read_record(np.double)
+            edd_time = f.read_record(np.double)
+            press_time = f.read_record(np.double)
+            jtrop_time = f.read_record(np.int32)[0]
+            h2osat = f.read_record(np.double)
             if amount2save == 1:
                 P = f.read_record(np.double)
                 surf_radiance = f.read_record(np.double)
@@ -131,7 +142,12 @@ def read_evolve_output(filename):
             for i,sp in enumerate(ispec):
                 sol[sp][j] = D[i]/den
             sol['time'][j] = t
+            sol['T_time'][j] = T_time
+            sol['edd_time'][j] = edd_time
+            sol['press_time'][j] = press_time
+            sol['jtrop_time'][j] = jtrop_time
             sol['den'][j] = den
+            sol['h2osat'][j] = h2osat
             if amount2save == 1:
                 for i,sp in enumerate(ispec[:nq]):
                     sol[sp+"_chemprod"][j] = yp[i]
