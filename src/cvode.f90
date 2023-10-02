@@ -216,13 +216,13 @@ end subroutine
 
 
 subroutine cvode_save(t0, usol_start, nnq, nnz, t_eval, num_t_eval, rtol, atol, &
-                      use_fast_jacobian, outfilename, amount2save, success, err)
+                      use_fast_jacobian, outfilename, amount2save, last_solution, success, err)
   use photochem_data, only: neq, nq, nz, jtrop, ispec, np, nr, background_spec, &
                             nw, wavl, z, jchem, kj, ks, photoreac, photonums, photospec, &
                             jchem, nmax, iprod, iloss,nump,numl, nsp, background_mu, mass, rainout_on, &
                             Flux                         
   use photochem_vars, only: lbound, fixedmr, T, den, P, Press, &
-                            rpar_init, edd, &
+                            rpar_init, edd, h2osat, &
                             max_cvode_steps, initial_dt, max_err_test_failures, max_order
   use photochem_wrk, only: rain, raingc, global_err, rpar, surf_radiance, A, yp, yl, D, &
                            cvode_mem
@@ -253,6 +253,7 @@ subroutine cvode_save(t0, usol_start, nnq, nnz, t_eval, num_t_eval, rtol, atol, 
   character(len=*), intent(in) :: outfilename ! were to save the solution
   integer, intent(in) :: amount2save
   
+  real(8), dimension(nnq,nnz), intent(out) :: last_solution
   logical, intent(out) :: success
   character(len=1000), intent(out) :: err
   
@@ -482,6 +483,11 @@ subroutine cvode_save(t0, usol_start, nnq, nnz, t_eval, num_t_eval, rtol, atol, 
       ! write(2) solution_temp
       write(2) D
       write(2) den
+      write(2) T
+      write(2) edd
+      write(2) P
+      write(2) jtrop
+      write(2) h2osat
       if (amount2save == 1) then
         write(2) P
         write(2) surf_radiance
@@ -495,6 +501,7 @@ subroutine cvode_save(t0, usol_start, nnq, nnz, t_eval, num_t_eval, rtol, atol, 
     
   enddo
   
+  last_solution = solution_temp
   ! free memory
   call FN_VDestroy(sunvec_y)
   call FCVodeFree(cvode_mem)
