@@ -220,15 +220,15 @@ subroutine cvode_save(t0, usol_start, nnq, nnz, t_eval, num_t_eval, rtol, atol, 
   use photochem_data, only: neq, nq, nz, jtrop, ispec, np, nr, background_spec, &
                             nw, wavl, z, jchem, kj, ks, photoreac, photonums, photospec, &
                             jchem, nmax, iprod, iloss,nump,numl, nsp, background_mu, mass, rainout_on, &
-                            Flux                         
+                            Flux, nz1                         
   use photochem_vars, only: lbound, fixedmr, T, den, P, Press, &
                             rpar_init, edd, &
                             max_cvode_steps, initial_dt, max_err_test_failures, max_order
   use photochem_wrk, only: rain, raingc, global_err, rpar, surf_radiance, A, yp, yl, D, &
-                           cvode_mem
+                           cvode_mem, raingc, adl, add, adu, dl, dd, du, dk
 
   use, intrinsic :: iso_c_binding
-  use fcvode_mod, only: CV_BDF, CV_NORMAL, FCVodeInit, FCVodeSStolerances, &
+  use fcvode_mod, only: CV_BDF, CV_NORMAL,CV_ONE_STEP, FCVodeInit, FCVodeSStolerances, &
                         FCVodeSetLinearSolver, FCVode, FCVodeCreate, FCVodeFree, &
                         FCVodeSetMaxNumSteps, FCVodeSetJacFn, FCVodeSetInitStep, &
                         FCVodeGetCurrentStep, FCVodeSetMaxErrTestFails, FCVodeSetMaxOrd
@@ -257,7 +257,7 @@ subroutine cvode_save(t0, usol_start, nnq, nnz, t_eval, num_t_eval, rtol, atol, 
   character(len=1000), intent(out) :: err
   
   ! local
-  real(c_double) :: tcur(1)    ! current time
+  real(c_double) :: tcur(1), t_old(1)    ! current time
   integer(c_int) :: ierr       ! error flag from C functions
   ! type(c_ptr)    :: cvode_mem  ! CVODE memory
   type(N_Vector), pointer :: sunvec_y ! sundials vector
@@ -273,7 +273,12 @@ subroutine cvode_save(t0, usol_start, nnq, nnz, t_eval, num_t_eval, rtol, atol, 
   integer :: ind(1)
   real(8) :: mubar_z(nz) ! needed for initialization
   character(len=10) :: message
-  integer :: i, j, k, ii
+  integer :: i, j, k, ii, r1, r2, t_eval_i, one_more
+  real(8), dimension(nq, nz):: transport_rates
+  real(8), dimension(nq, nz):: rainout_rates
+  real(8), dimension(nq, nz):: mr_change_reactions
+  real(8), dimension(nr, nz):: reaction_rates
+  real*8 xp(nz), xl(nz)
   
   allocate(UDOT(neq))
   allocate(loss(nq,nz))
@@ -418,9 +423,11 @@ subroutine cvode_save(t0, usol_start, nnq, nnz, t_eval, num_t_eval, rtol, atol, 
     return
   end if
   
-  
-  do ii = 1, num_t_eval
-    ierr = FCVode(cvode_mem, t_eval(ii), sunvec_y, tcur, CV_NORMAL)
+  ! t_eval_i = 1
+  ! one_more = 0
+  do while (tcur(1) < t_eval(num_t_eval))
+    ! t_old = tcur
+    ierr = FCVode(cvode_mem, t_eval(num_t_eval), sunvec_y, tcur, CV_ONE_STEP)
     if (ierr /= 0) then
       success = .false.
       if (ierr == -1) then ! reached max steps
@@ -450,47 +457,95 @@ subroutine cvode_save(t0, usol_start, nnq, nnz, t_eval, num_t_eval, rtol, atol, 
     else
       success = .true.
 
-      ! save the solution
-      do I=1,NQ
-        do J=1,NZ
-          K = I + (J-1)*NQ
-          solution_temp(i,j) = yvec(k)
+      ! if ((tcur(1) > t_eval(t_eval_i)) .or. (one_more>0)) then
+      if (tcur(1) > 1.0e11) then
+        one_more = one_more + 1
+        t_eval_i =  t_eval_i + 1
+        ! save the solution
+        do I=1,NQ
+          do J=1,NZ
+            K = I + (J-1)*NQ
+            solution_temp(i,j) = yvec(k)
+          enddo
         enddo
-      enddo
 
-      ! fix lbound = 1
-      do i=1,nq
-        if (lbound(i) .eq.1) then
-          solution_temp(i,1) = fixedmr(i)
+        
+        ! transport terms at interior grid points molec/cm^3/s
+        DO i = 1,NQ
+          DO j=2,NZ1
+            K = I + (J-1)*NQ
+            transport_rates(i, j) = - DD(i,J)*solution_temp(I,J)-ADD(i,j)*solution_temp(I,J) &
+            + DU(i,J)*solution_temp(I,J+1) + ADU(i,j)*solution_temp(i,j+1) &
+            + DL(i,J)*solution_temp(I,J-1) + ADL(i,J)*solution_temp(I,J-1)
+          enddo
+        enddo
+
+        ! rainout molec/cm^3/s
+        DO i = 1,NQ
+          DO j=1,NZ
+            K = I + (J-1)*NQ
+            rainout_rates(i, j) = RAINGC(I,J) * solution_temp(i,j)
+          enddo
+        enddo
+
+        ! change in mr due to reactions
+        do i = 1 , nq
+          CALL CHEMPL(A, d,xp,xl,i)
+          DO j = 1 , nz
+          !   xlj = xl(j) + RAINGC(i,j)
+              K = I + (J-1)*NQ
+              mr_change_reactions(i,j) = xp(j)/DEN(j) - xl(j)*solution_temp(i,j)
+          ENDDO
+        ENDDO
+
+        ! calculate reaction rates
+        do j = 1, nr
+          r1 = JCHEM(1,j)
+          r2 = JCHEM(2,j)
+          reaction_rates(j, :) = A(j, :) * D(r1,:) * D(r2,:)
+        end do
+
+        ! fix lbound = 1
+        do i=1,nq
+          if (lbound(i) .eq.1) then
+            solution_temp(i,1) = fixedmr(i)
+          endif
+        enddo
+        
+        call right_hand_side(tcur(1), yvec, udot, neq, err)
+        photorates = 0.d0
+        do j=1,kj
+          i = photoreac(j)   
+          ind = findloc_integer(size(photospec),photospec,i)
+          photorates(ind(1),:) = photorates(ind(1),:) + A(photonums(j),:)*solution_temp(i,:)*den
+        enddo
+        do j = 1,nq
+          loss(j,:) = yl(j,:)*solution_temp(j,:)*den
+        enddo
+        
+        open(2,file=outfilename,status='old',form="unformatted", position="append")
+        write(2) 999
+        write(2) tcur(1)
+        ! write(2) solution_temp
+        write(2) D
+        write(2) transport_rates
+        write(2) rainout_rates
+        write(2) mr_change_reactions
+        write(2) reaction_rates
+        write(2) den
+        if (amount2save == 1) then
+          write(2) P
+          write(2) surf_radiance
+          write(2) photorates
+          write(2) yp
+          write(2) loss
         endif
-      enddo
-      
-      call right_hand_side(t_eval(ii), yvec, udot, neq, err)
-      photorates = 0.d0
-      do j=1,kj
-        i = photoreac(j)   
-        ind = findloc_integer(size(photospec),photospec,i)
-        photorates(ind(1),:) = photorates(ind(1),:) + A(photonums(j),:)*solution_temp(i,:)*den
-      enddo
-      do j = 1,nq
-        loss(j,:) = yl(j,:)*solution_temp(j,:)*den
-      enddo
-      
-      open(2,file=outfilename,status='old',form="unformatted", position="append")
-      write(2) 999
-      write(2) t_eval(ii)
-      ! write(2) solution_temp
-      write(2) D
-      write(2) den
-      if (amount2save == 1) then
-        write(2) P
-        write(2) surf_radiance
-        write(2) photorates
-        write(2) yp
-        write(2) loss
+        close(2)
       endif
-      close(2)
-  
+    
+    ! if ( one_more > 1 ) then
+    !   one_more = 0
+    ! end if
     endif
     
   enddo
@@ -628,4 +683,5 @@ subroutine cvode_equilibrium(rtol, atol, use_fast_jacobian, success, err)
     call redox_conservation(FLOW,FUP,SR)
   endif ! end if converged
 
-end subroutine                                
+end subroutine  
+
